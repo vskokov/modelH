@@ -47,15 +47,15 @@ end
 
 function project(π)
     π_fft = cat([fft(π[:,:,:,i]) for i in 1:3]...; dims=4)
-    
-    π_sum = [2*sin(pi/L * (i-1))*π[i,j,k,1] + 2*sin(pi/L * (j-1))*π[i,j,k,2] + 2*sin(pi/L * (k-1))*π[i,j,k,3] for i in 1:L, j in 1:L, k in 1:L]
-    
+
+    π_sum = [2*sin(pi/L * (i-1))*π_fft[i,j,k,1] + 2*sin(pi/L * (j-1))*π_fft[i,j,k,2] + 2*sin(pi/L * (k-1))*π_fft[i,j,k,3] for i in 1:L, j in 1:L, k in 1:L]
+
     π_fft[:,:,:,1] .-= [2*sin(pi/L * i) / 4 / (sin(pi/L * i)^2 + sin(pi/L * j)^2 + sin(pi/L * k)^2) for i in 0:L-1, j in 0:L-1, k in 0:L-1] .* π_sum
     π_fft[:,:,:,2] .-= [2*sin(pi/L * j) / 4 / (sin(pi/L * i)^2 + sin(pi/L * j)^2 + sin(pi/L * k)^2) for i in 0:L-1, j in 0:L-1, k in 0:L-1] .* π_sum
     π_fft[:,:,:,3] .-= [2*sin(pi/L * k) / 4 / (sin(pi/L * i)^2 + sin(pi/L * j)^2 + sin(pi/L * k)^2) for i in 0:L-1, j in 0:L-1, k in 0:L-1] .* π_sum
     π_fft[1,1,1,:] .= 0
 
-    cat([ifft(π_fft[:,:,:,i]) for i in 1:3]...; dims=4)
+    real.(cat([ifft(π_fft[:,:,:,i]) for i in 1:3]...; dims=4))
 end
 
 function dissipative(π)
