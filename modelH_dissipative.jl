@@ -62,7 +62,7 @@ function dissipative(π)
     for n in 0:2, m in 0:1
         Threads.@threads for index in 0:3*L^3÷2-1
             μ = index ÷ (L^3÷2)
-            i = (index ÷ L^2) % (L ÷ 4)
+            i = (index ÷ L^2) % (L ÷ 2)
             j = (index ÷ L) % L
             k = index % L
             
