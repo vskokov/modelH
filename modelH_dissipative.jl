@@ -4,6 +4,7 @@ using Distributions
 using Printf
 using JLD2
 using Random
+using FFTW
 
 # Random.seed!(parse(Int, ARGS[3]))
 # CUDA.seed!(parse(Int, ARGS[3]))
@@ -41,20 +42,33 @@ function pi_sweep(π, n, m, μ, (i,j,k))
     @inbounds x1 = (xyz[n%3+1], xyz[(n+1)%3+1], xyz[(n+2)%3+1])
     @inbounds x2 = ((x1[1]-(n!=0))%L+1, (x1[2]-(n!=1))%L+1, (x1[3]-(n!=2))%L+1)
 
-    MCstep(π, μ, x1, x2)
+    pi_step(π, μ, x1, x2)
+end
+
+function project(π)
+    π_fft = cat([fft(π[:,:,:,i]) for i in 1:3]...; dims=4)
+    
+    π_sum = [2*sin(pi/L * (i-1))*π[i,j,k,1] + 2*sin(pi/L * (j-1))*π[i,j,k,2] + 2*sin(pi/L * (k-1))*π[i,j,k,3] for i in 1:L, j in 1:L, k in 1:L]
+    
+    π_fft[:,:,:,1] .-= [2*sin(pi/L * i) / 4 / (sin(pi/L * i)^2 + sin(pi/L * j)^2 + sin(pi/L * k)^2) for i in 0:L-1, j in 0:L-1, k in 0:L-1] .* π_sum
+    π_fft[:,:,:,2] .-= [2*sin(pi/L * j) / 4 / (sin(pi/L * i)^2 + sin(pi/L * j)^2 + sin(pi/L * k)^2) for i in 0:L-1, j in 0:L-1, k in 0:L-1] .* π_sum
+    π_fft[:,:,:,3] .-= [2*sin(pi/L * k) / 4 / (sin(pi/L * i)^2 + sin(pi/L * j)^2 + sin(pi/L * k)^2) for i in 0:L-1, j in 0:L-1, k in 0:L-1] .* π_sum
+    π_fft[1,1,1,:] .= 0
+
+    cat([ifft(π_fft[:,:,:,i]) for i in 1:3]...; dims=4)
 end
 
 function dissipative(π)
-	for n in 0:2, m in 0:1
-        @Threads.threads for index in 0:3*L^3÷2-1
+    for n in 0:2, m in 0:1
+        Threads.@threads for index in 0:3*L^3÷2-1
             μ = index ÷ (L^3÷2)
             i = (index ÷ L^2) % (L ÷ 4)
             j = (index ÷ L) % L
             k = index % L
-
+            
             pi_sweep(π, n, m, μ, (i,j,k))
         end
-	end
+    end
 end
 
 function thermalize(π, N)
