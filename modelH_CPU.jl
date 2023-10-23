@@ -27,6 +27,7 @@ const η = 1.0e0
 const T = 1.0e0
 const ρ = 1.0e0
 
+const m² = -2.28587
 const Δt = 0.04e0/Γ
 const Rate_phi = Float64(sqrt(2.0*Δt*Γ))
 const Rate_pi = Float64(sqrt(2.0*Δt*η))
@@ -133,7 +134,6 @@ function dissipative(ϕ, π)
 end
 
 function Δ(ϕ)
-    # unavoidable allocations
     dϕ = -6*ϕ
 
     for μ in 1:3
@@ -192,7 +192,7 @@ end
 
 # maccormack
 function maccormack(ϕ, π, direction)
-    # project(π, direction)
+    project(π, direction)
 
     # temporary arrays 
     dj = similar(ϕ)
@@ -237,31 +237,19 @@ function maccormack_step(ϕ, π)
 end
 
 function thermalize(ϕ, π, N)
-	for _ in 1:N
-		dissipative(ϕ, π)
-	end
+    for _ in 1:N
+        maccormack_step(ϕ, π)
+        dissipative(ϕ, π)
+    end
 end
 
-m² = -2.28587
-
-π = hotstart(L, 3)
 ϕ = hotstart(L)
+π = hotstart(L, 3)
 
-# for μ in 1:3
-#     π[:,:,:,μ] .= π[:,:,:,μ] .- shuffle(π[:,:,:,μ]);
-# end
-
-π .= 0.0e0
-π[:,:,:,1] .= 0.1e0
-ϕ .= [exp(-((x-8)^2 + (y-8)^2 + (z-8)^2) / 2) for x in 1:L, y in 1:L, z in 1:L]
-
-# plot(π[:,8,8,1])
-plot(ϕ[:,8,8])
-println(sum(ϕ))
-
-for _ in 1:70
-    maccormack_step(ϕ, π)
+for μ in 1:3
+    π[:,:,:,μ] .= π[:,:,:,μ] .- shuffle(π[:,:,:,μ]);
 end
 
-println(sum(ϕ))
-plot!(ϕ[:,8,8])
+ϕ .= ϕ .- shuffle(ϕ)
+
+thermalize(ϕ, π, 5000)
