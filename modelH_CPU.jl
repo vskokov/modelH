@@ -1,39 +1,59 @@
+#= 
+
+.88b  d88.  .d88b.  d8888b. d88888b db           db   db 
+88'YbdP`88 .8P  Y8. 88  `8D 88'     88           88   88 
+88  88  88 88    88 88   88 88ooooo 88           88ooo88 
+88  88  88 88    88 88   88 88~~~~~ 88           88~~~88 
+88  88  88 `8b  d8' 88  .8D 88.     88booo.      88   88 
+YP  YP  YP  `Y88P'  Y8888D' Y88888P Y88888P      YP   YP 
+
+=# 
+
 cd(@__DIR__)
 
 using Distributions
 using Printf
-using JLD2
 using Random
 using FFTW
-using StaticArrays
+using Plots
 
-# Random.seed!(parse(Int, ARGS[3]))
-# CUDA.seed!(parse(Int, ARGS[3]))
+const LEFT = -1
+const RIGHT = 1
 
-# const L = parse(Int, ARGS[1]) # must be a multiple of 4
 const L = 16
 const λ = 4.0e0
 const Γ = 1.0e0
 const η = 1.0e0
 const T = 1.0e0
+const ρ = 1.0e0
 
 const Δt = 0.04e0/Γ
 const Rate_phi = Float64(sqrt(2.0*Δt*Γ))
 const Rate_pi = Float64(sqrt(2.0*Δt*η))
 ξ = Normal(0.0e0, 1.0e0)
 
-function hotstart(n)
-	rand(ξ, n, n, n, 3)
+function hotstart(n, Ncomponents)
+	rand(ξ, n, n, n, Ncomponents)
 end
 
-# nearest neighbor +
+function hotstart(n)
+	rand(ξ, n, n, n)
+end
+
+## nearest neighbor
 function NNp(n)
     n%L+1
 end
 
-# nearest neighbor -
 function NNm(n)
     (n+L-2)%L+1
+end
+##
+
+# generates shifts
+function shifts(direction, component)
+    # quite obscure set of operations to avoid ifs 
+    (-direction*(1÷component), -direction*mod(2÷component,2), -direction*(component÷3))
 end
 
 function pi_step(π, μ, x1, x2)
@@ -112,54 +132,57 @@ function dissipative(ϕ, π)
     end
 end
 
-function Δ(ϕ, n1, n2, n3)
-    out = ϕ[NNp(n1), n2, n3] + ϕ[NNm(n1), n2, n3] + ϕ[n1, NNp(n2), n3] + ϕ[n1, NNm(n2), n3] + ϕ[n1, n2, NNp(n3)] + ϕ[n1, n2, NNm(n3)] - 6*ϕ[n1, n2, n3]
+function Δ(ϕ)
+    # unavoidable allocations
+    dϕ = -6*ϕ
 
-    return out
+    for μ in 1:3
+        dϕ .+= circshift(ϕ, shifts(LEFT, μ)) 
+        dϕ .+= circshift(ϕ, shifts(RIGHT,μ)) 
+    end
+
+    return dϕ
+end 
+
+function ∇(src, dest, direction, component) 
+    circshift!(dest, src, shifts(direction,component))
+    dest .= (dest .- src) * direction
+
+    return 1 
 end
 
-function ∇ᵣ(ϕ, n)
-    out = ϕ[NNp(n)] - ϕ[n]
-    return out 
+function ∇conj(src, dest, direction, component) 
+    circshift!(dest, src, shifts(-direction,component))
+    dest .= (src .- dest) * direction
+
+    return 1 
 end
 
-function ∇ₗ(ϕ, n)
-    out = - ϕ[NNm(n)] + ϕ[n]
-    return out 
-end
-
-function Poison(ϕ)
+function Poisson(ϕ)
     Afft = fft(ϕ)
-    for n1 in 1:L
-        for n2 in 1:L
-            for n3 in 1:L
-                k2 = 4* (sin(pi/L * (n1-1))^2 + sin(pi/L * (n2-1))^2 + sin(pi/L * (n3-1))^2)
-                Afft[n1,n2,n3] = -Afft[n1,n2,n3] /  k2 
-            end
-        end
+    for n1 in 1:L, n2 in 1:L, n3 in 1:L
+        k2 = 4* (sin(pi/L * (n1-1))^2 + sin(pi/L * (n2-1))^2 + sin(pi/L * (n3-1))^2)
+        Afft[n1,n2,n3] = -Afft[n1,n2,n3] /  k2 
     end
     Afft[1,1,1] = 0.0 
     ϕ .= real.(ifft(Afft))
 end
 
-function projectX(π)
+function project(π, direction)
+    # ∇_μ projectμ = 0 
+
     π_sum = zeros(Float64,(L,L,L))
     temp = zeros(Float64,(L,L,L,3))
-    
-    for n1 in 1:L, n2 in 1:L, n3 in 1:L
-        π_sum[n1,n2,n3] = ∇ᵣ(π[:,n2,n3,1], n1) + ∇ᵣ(π[n1,:,n3,2], n2) + ∇ᵣ(π[n1,n2,:,3], n3)
-    end
 
-    for n1 in 1:L, n2 in 1:L, n3 in 1:L 
-        temp[n1,n2,n3,1] = - ∇ₗ(@view(π_sum[:,n2,n3]),n1) + Δ(@view(π[:,:,:,1]), n1, n2, n3)
+    for μ in 1:3 
+        ∇(@view(π[:,:,:,μ]), @view(temp[:,:,:,μ]), direction, μ)
+        π_sum .-= temp[:,:,:,μ] # note that π_sum is actiually - π_sum
+    end 
 
-        temp[n1,n2,n3,2] = - ∇ₗ(@view(π_sum[n1,:,n3]),n2) + Δ(@view(π[:,:,:,2]), n1, n2, n3)
-
-        temp[n1,n2,n3,3] = - ∇ₗ(@view(π_sum[n1,n2,:]),n3) + Δ(@view(π[:,:,:,3]), n1, n2, n3)
-    end
-
-    for μ in 1:3
-        Poison(@view(temp[:,:,:,μ]))    
+    Threads.@threads for μ in 1:3 
+        ∇conj(π_sum, @view(temp[:,:,:,μ]), direction, μ)
+        temp[:,:,:,μ] .+= Δ(@view(π[:,:,:,μ]))
+        Poisson(@view(temp[:,:,:,μ]))    
     end 
 
     π .= temp
@@ -167,25 +190,78 @@ function projectX(π)
     return 1
 end
 
-function thermalize(π, N)
+# maccormack
+function maccormack(ϕ, π, direction)
+    # project(π, direction)
+
+    # temporary arrays 
+    dj = similar(ϕ)
+    dϕ = similar(ϕ)
+    dϕ_μ = similar(ϕ)
+    dϕ_ν = similar(ϕ)
+    dπ = similar(π)
+
+    dj .= 0.0
+    dϕ .= ϕ
+    dπ .= 0.0
+
+    for μ in 1:3
+        ∇(π[:,:,:,μ] .* ϕ, dj, direction, μ)
+        dϕ .-= Δt*dj        
+    end
+
+    dj .= 0.0
+
+    for ν in 1:3
+        ∇conj(ϕ, dϕ_ν, direction, ν)
+
+        for μ in 1:3
+            ∇conj(ϕ, dϕ_μ, direction, μ) 
+            dj .= 1/ρ * π[:,:,:,μ] .* π[:,:,:,ν] .+ dϕ_μ .* dϕ_ν
+            # overwrite dϕ_μ because it's not needed
+            ∇(dj, dϕ_μ, direction, μ)
+            dπ[:,:,:,ν] .-= Δt*dϕ_μ 
+        end
+
+        dπ[:,:,:,ν] .+= π[:,:,:,ν] 
+    end
+
+    return (dϕ,dπ) # returns * or ** updates 
+end
+
+function maccormack_step(ϕ, π)
+    step1 = maccormack(ϕ, π, RIGHT)
+    step2 = maccormack(step1..., LEFT)
+    ϕ .= 1/2 * (ϕ .+ step2[1])
+    π .= 1/2 * (π .+ step2[2])
+end
+
+function thermalize(ϕ, π, N)
 	for _ in 1:N
-		dissipative(π)
+		dissipative(ϕ, π)
 	end
-    projectX(π)
 end
 
 m² = -2.28587
 
-π = hotstart(L)
+π = hotstart(L, 3)
+ϕ = hotstart(L)
 
-for μ in 1:3
-    π[:,:,:,μ] .= π[:,:,:,μ] .- shuffle(π[:,:,:,μ]);
+# for μ in 1:3
+#     π[:,:,:,μ] .= π[:,:,:,μ] .- shuffle(π[:,:,:,μ]);
+# end
+
+π .= 0.0e0
+π[:,:,:,1] .= 0.1e0
+ϕ .= [exp(-((x-8)^2 + (y-8)^2 + (z-8)^2) / 2) for x in 1:L, y in 1:L, z in 1:L]
+
+# plot(π[:,8,8,1])
+plot(ϕ[:,8,8])
+println(sum(ϕ))
+
+for _ in 1:70
+    maccormack_step(ϕ, π)
 end
 
-@btime projectX(π)
-
-# beforeP= ∇ᵣ(π[:,7,7,1], 7) + ∇ᵣ(π[7,:,7,2], 7) + ∇ᵣ(π[7,7,:,3], 7)
-#
-# thermalize(π, 1)
-#
-# afterP1= ∇ᵣ(π[:,7,7,1], 7) + ∇ᵣ(π[7,:,7,2], 7) + ∇ᵣ(π[7,7,:,3], 7)
+println(sum(ϕ))
+plot!(ϕ[:,8,8])
