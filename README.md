@@ -2,7 +2,7 @@
 
 
 For simplicity, we first look at the continuum equations of motion for
-(*ϕ*,*π⃗*<sub>*T*</sub>) without dissipation or noise:
+(*ϕ*,*π*<sub>*T*</sub>) without dissipation or noise:
 $$\begin{aligned}
     \dot{\phi} &= - \nabla\_\mu \left( \phi \\ \pi\_{T,\mu} \right) = - \pi\_{T,\mu} \\ \nabla\_\mu \phi, \label{phi_dot}\\
     %
