@@ -9,11 +9,11 @@
 For simplicity, we first look at the continuum equations of motion for
 ($\phi$, $\pi$) without dissipation or noise:
 $$\begin{aligned}
-    \dot{\phi} &= - \nabla\_\mu \left( \phi \\ \pi\_{T,\mu} \right) = - \pi\_{T,\mu} \\ \nabla\_\mu \phi, \label{phi_dot}\\
+    \dot{\phi} &= - \nabla\_\mu \left( \phi \\ \pi\_{T,\mu} \right) = - \pi\_{T,\mu} \\ \nabla\_\mu \phi, \\
     %
-    \dot{\pi}\_{T,i} &= - \hat{{\cal T}}\_{ij} \nabla_k \left( \pi\_{T,k} \pi\_{T,j} + \nabla_k \phi \nabla_j \phi \right) \nonumber \\
+    \dot{\pi}\_{T,i} &= - \hat{{\cal T}}\_{ij} \nabla_k \left( \pi\_{T,k} \pi\_{T,j} + \nabla_k \phi \nabla_j \phi \right) \\
     %
-    & = - \hat{{\cal T}}\_{ij} \left\[ \nabla_k \left(\pi\_{T,k} \pi\_{T,j} \right) + \nabla_j \phi \nabla^2 \phi \right\] \label{pi_dot}
+    & = - \hat{{\cal T}}\_{ij} \left\[ \nabla_k \left(\pi\_{T,k} \pi\_{T,j} \right) + \nabla_j \phi \nabla^2 \phi \right\] 
 \end{aligned}$$
 
 The time derivative of the Hamiltonian is (assumed *ρ* = 1),
