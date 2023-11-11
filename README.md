@@ -9,7 +9,7 @@
 For simplicity, we first look at the continuum equations of motion for
 ($\phi$, $\pi$) without dissipation or noise:
 $$\begin{aligned}
-    \dot{\phi} &= - \nabla\_\mu \left( \phi \\ \pi\_{T,\mu} \right) = - \pi\_{T,\mu} \\ \nabla\_\mu \phi, \\
+    \dot{\phi} &= - \nabla\_\mu \left( \phi \pi\_{T,\mu} \right) = - \pi\_{T,\mu}  \nabla\_\mu \phi, \\
     %
     \dot{\pi}\_{T,i} &= - \hat{{\cal T}}\_{ij} \nabla_k \left( \pi\_{T,k} \pi\_{T,j} + \nabla_k \phi \nabla_j \phi \right) \\
     %
