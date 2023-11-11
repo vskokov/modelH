@@ -30,7 +30,8 @@ const RIGHT = 1
 # Random seed is set by the first argument passed to Julia
 # """
 
-#Random.seed!(parse(Int,ARGS[1]))
+ID = parse(Int,ARGS[1])
+Random.seed!(ID)
 
 
 
@@ -447,55 +448,28 @@ function run()
     display( Π[1,1,1,1] )
   end 
   
-  #Π .= 0.0e0
 
   ϕ .= ϕ .- shuffle(ϕ)
- 
-  #smoothen 
-  [@time prethermalize(ϕ, Π, m², L^2) for i in 1:20]
   
-  #ϕ .= 0.0
+  Π .= 0.0
+  ϕ .= 0.0
 
-  [@time thermalize(u, m², 1) for i in 1:50]
-
-  [@time thermalize(u, m², L^4) for i in 1:5]
+  [Π[:, y, :, 1] .= 20*sin(2π/L*(y-1)) for y in 1:L]
   
-  maxt = 10*L^4
-  skip = 10 
+  maxt = 10^4
+  skip = 20 
 
-  open("output_$L.dat","w") do io 
-  open("outputpi_$L.dat","w") do iopi 
-	  for i in 0:maxt
-		  
-      if sum_check(ϕ) 
-               break
-      end
-
-      project(Π)
-      (M,ϕk) = op(ϕ, L)
-		  Printf.@printf(io, "%i %f", i*skip, M)
-		  for kx in 1:L
-			  Printf.@printf(io, " %f %f", real(ϕk[kx]), imag(ϕk[kx]))
-		  end 
-		  
-      Printf.@printf(io, " %f \n", energy(ϕ, Π))
+  for it in 1:20
+    open("data/shearwave_$ID"*"_$it.dat","w") do io
+      Printf.@printf(io, "%f", it*Δt)
+      for i in 1:L
+        Printf.@printf(io, " %f", Π[L÷2, i, L÷2, 1])
+      end 
+      Printf.@printf(io, "\n")
       Printf.flush(io)
-      
-      (M,pik) = op(@view(u[:,:,:,2]), L)
-		  Printf.@printf(iopi, "%i %f", i*skip, M)
-		  for kx in 1:L
-			  Printf.@printf(iopi, " %f %f", real(pik[kx]), imag(pik[kx]))
-		  end 
-
-		  Printf.@printf(iopi, "\n")
-      Printf.flush(iopi)
-
-		  thermalize(u, m², skip)
-      #display(i)
-	  end
-  end
-  end
-
+    end
+    thermalize(u, m², skip)
+  end 
 
 end
 
