@@ -9,9 +9,6 @@ YP  YP  YP  `Y88P'  Y8888D' Y88888P Y88888P      YP   YP
 
 =# 
 
-
-#julia -t 10 --check-bounds=no
-
 cd(@__DIR__)
 
 using Distributions
@@ -24,100 +21,48 @@ const LEFT = -1
 const RIGHT = 1
 
 
+const ID = parse(Int,ARGS[1])
+Random.seed!(ID)
 
-# """
-# Random seed is set by the first argument passed to Julia
-# """
-Random.seed!(parse(Int,ARGS[1]))
-
-
-
-# """
-#   Parameters below are
-#   1. L is the number of lattice sites in each dimension; it accepts the second argument passed to julia   
-#   2. λ is the 4 field coupling
-#   3. Γ is the scalar field diffusion rate; in our calculations we set it to 1, assuming that the time is measured in the appropriate units 
-#   4. T is the temperature 
-#   5. 
-#   6. 
-#   7. m² = -2.28587 is the critical value of the mass parameter 
-#   8. 
-#   9. 
-#   10. 
-# """
+### Lattice Size
 const L = parse(Int,ARGS[2])
+
 const λ = 4.0e0
 const Γ = 1.0e0
+const η = 1.0e0
 const T = 1.0e0
 const ρ = 1.0e0
 
-const η = 0.1e0
-
 const m² = -2.28587
-#const m² = -0.0e0
 const Δt = 0.04e0/Γ
-
-const Δtdet =  Δt
-
 const Rate_phi = Float64(sqrt(2.0*Δt*Γ))
 const Rate_pi = Float64(sqrt(2.0*Δt*η))
 ξ = Normal(0.0e0, 1.0e0)
 
-
-#set_zero_subnormals(true)
-
-
-"""
-    sum_check(x)
-
-Checks if any x, or any of its entries are infinite or NAN 
-"""
-function sum_check(x)
-    s = sum(x)
-    isnan(s) || !isfinite(s)
-end
-
-"""
-    Hot start initializes n x n x n x Ncomponents array 
-"""
 function hotstart(n, Ncomponents)
 	rand(ξ, n, n, n, Ncomponents)
 end
 
-"""
-    Hot start initializes n x n x n array 
-"""
 function hotstart(n)
 	rand(ξ, n, n, n)
 end
 
-"""
- Rerurns n+1 defined on a periodic lattice 
-"""
+## nearest neighbor
 function NNp(n)
     n%L+1
 end
 
-"""
- Rerurns n-1 defined on a periodic lattice 
-"""
 function NNm(n)
     (n+L-2)%L+1
 end
+##
 
-
-"""
-  defines the shifts of arrays in the n-th dimension (component) and the direction direction
-  This is useful for derivatives on the lattice 
-"""
+# generates shifts
 function shifts(direction, component)
     # quite obscure set of operations to avoid ifs 
     (-direction*(1÷component), -direction*mod(2÷component,2), -direction*(component÷3))
 end
 
-"""
-  Elementary stochastic step with the transfer of the momentum density (μ-th component) from the cell x1 to x2 
-"""
 function pi_step(π, μ, x1, x2)
 	norm = cos(2pi*rand())*sqrt(-2.0*log(rand()))
 	q = Rate_pi * norm
@@ -128,12 +73,8 @@ function pi_step(π, μ, x1, x2)
 
 	@inbounds π[x1..., μ] += q * (r<P)
 	@inbounds π[x2..., μ] -= q * (r<P)
-  # note that (r<P) returns wither 1 or 0 
 end
 
-"""
-
-"""
 function pi_sweep(π, n, m, μ, (i,j,k))
     xyz = ((2i + m)%L+1, j%L+1, k%L+1)
     @inbounds x1 = (xyz[n%3+1], xyz[(n+1)%3+1], xyz[(n+2)%3+1])
@@ -142,29 +83,22 @@ function pi_sweep(π, n, m, μ, (i,j,k))
     pi_step(π, μ, x1, x2)
 end
 
-"""
-  Computing the local change of energy in the cell x 
-"""
 function ΔH_phi(x, ϕ, q, m²)
 	@inbounds ϕold = ϕ[x...]
 	ϕt = ϕold + q
-	#Δϕ = ϕt - ϕold
-	Δϕ = q
+	Δϕ = ϕt - ϕold
 	Δϕ² = ϕt^2 - ϕold^2
 
-  @inbounds ∑nn = ϕ[NNp(x[1]), x[2], x[3]] + ϕ[x[1], NNp(x[2]), x[3]] + ϕ[x[1], x[2], NNp(x[3])] + ϕ[NNm(x[1]), x[2], x[3]] + ϕ[x[1], NNm(x[2]), x[3]] + ϕ[x[1], x[2], NNm(x[3])]
+    @inbounds ∑nn = ϕ[NNp(x[1]), x[2], x[3]] + ϕ[x[1], NNp(x[2]), x[3]] + ϕ[x[1], x[2], NNp(x[3])] + ϕ[NNm(x[1]), x[2], x[3]] + ϕ[x[1], NNm(x[2]), x[3]] + ϕ[x[1], x[2], NNm(x[3])]
 
 	return 3Δϕ² - Δϕ * ∑nn + 0.5m² * Δϕ² + 0.25λ * (ϕt^4 - ϕold^4)
 end
 
-"""
-
-"""
 function phi_step(m², ϕ, x1, x2)
 	norm = cos(2pi*rand())*sqrt(-2*log(rand()))
 	q = Rate_phi * norm
 
-  δH = ΔH_phi(x1, ϕ, q, m²) + ΔH_phi(x2, ϕ, -q, m²) + q^2
+    δH = ΔH_phi(x1, ϕ, q, m²) + ΔH_phi(x2, ϕ, -q, m²) + q^2
 	P = min(1.0f0, exp(-δH))
 	r = rand()
 
@@ -172,9 +106,6 @@ function phi_step(m², ϕ, x1, x2)
 	@inbounds ϕ[x2...] -= q * (r<P)
 end
 
-"""
-
-"""
 function phi_sweep(m², ϕ, n, m, (i,j,k))
     xyz = ((4i + 2j + m%2)%L+1, (j + k + m÷2)%L+1, k%L+1)
     @inbounds x1 = (xyz[n%3+1], xyz[(n+1)%3+1], xyz[(n+2)%3+1])
@@ -183,10 +114,7 @@ function phi_sweep(m², ϕ, n, m, (i,j,k))
     phi_step(m², ϕ, x1, x2)
 end
 
-"""
-
-"""
-function dissipative(ϕ, π, m²)
+function dissipative(ϕ, π)
     # pi update
     for n in 0:2, m in 0:1
         Threads.@threads for index in 0:3*L^3÷2-1
@@ -236,9 +164,6 @@ function ∇conj(src, dest, direction, component)
     return 1 
 end
 
-"""
-  Solve Poisson equation Δ ϕ' = ϕ, overwrites ϕ
-"""
 function Poisson(ϕ)
     Afft = fft(ϕ)
     for n1 in 1:L, n2 in 1:L, n3 in 1:L
@@ -249,9 +174,6 @@ function Poisson(ϕ)
     ϕ .= real.(ifft(Afft))
 end
 
-"""
-  Projector 
-"""
 function project(π, direction)
     # ∇_μ projectμ = 0 
 
@@ -274,9 +196,7 @@ function project(π, direction)
     return 1
 end
 
-"""
-
-"""
+# maccormack
 function maccormack(ϕ, π, direction)
     project(π, direction)
 
@@ -293,7 +213,7 @@ function maccormack(ϕ, π, direction)
 
     for μ in 1:3
         ∇(π[:,:,:,μ] .* ϕ, dj, direction, μ)
-        dϕ .-= Δtdet *dj/ρ         
+        dϕ .-= Δt*dj        
     end
 
     dj .= 0.0
@@ -306,7 +226,7 @@ function maccormack(ϕ, π, direction)
             dj .= 1.0/ρ * π[:,:,:,μ] .* π[:,:,:,ν] .+ dϕ_μ .* dϕ_ν
             # overwrite dϕ_μ because it's not needed
             ∇(dj, dϕ_μ, direction, μ)
-            dπ[:,:,:,ν] .-= Δtdet *dϕ_μ 
+            dπ[:,:,:,ν] .-= Δt*dϕ_μ 
         end
 
         dπ[:,:,:,ν] .+= π[:,:,:,ν] 
@@ -315,41 +235,26 @@ function maccormack(ϕ, π, direction)
     return (dϕ,dπ) # returns * or ** updates 
 end
 
-"""
-
-"""
 function maccormack_step(ϕ, π)
     step1 = maccormack(ϕ, π, RIGHT)
     step2 = maccormack(step1..., LEFT)
-    ϕ .= 0.5e0 * (ϕ .+ step2[1])
-    π .= 0.5e0 * (π .+ step2[2])
+    ϕ .= 1/2 * (ϕ .+ step2[1])
+    π .= 1/2 * (π .+ step2[2])
 end
 
-"""
-
-"""
-function thermalize(ϕ, π, m², N)
+function thermalize(ϕ, π, N)
     for _ in 1:N
-      if sum_check(ϕ) 
-               break
-      end
-      dissipative(ϕ, π, m²)
-      maccormack_step(ϕ, π)
+        maccormack_step(ϕ, π)
+        #dissipative(ϕ, π)
     end
 end
 
-"""
-
-"""
 function op(ϕ, L)
 	ϕk = fft(ϕ)
 	average = ϕk[1,1,1]/L^3
 	(real(average),ϕk[:,1,1])
 end
 
-"""
-Main function, accepts no arguments; introduced to keep global scope tidier 
-"""
 function run()
 
   ϕ = hotstart(L)
@@ -358,46 +263,26 @@ function run()
   for μ in 1:3
     Π[:,:,:,μ] .= Π[:,:,:,μ] .- shuffle(Π[:,:,:,μ]);
   end
-  
-  Π .= 0.0
 
   ϕ .= ϕ .- shuffle(ϕ)
-  
-  ϕ .= 0.0
 
-  [@time thermalize(ϕ, Π, m², L^4) for i in 1:10]
-  
-  maxt = 10*L^4
-  skip = 10 
+  ϕ .= 0.0  
+  Π .= 0.0 
 
-  open("output_$L.dat","w") do io 
-  open("outputpi_$L.dat","w") do iopi 
-	  for i in 0:maxt
-		  
-      if sum_check(ϕ) 
-               break
+  [Π[:, y, :, 1] .= 20*sin(2π/L*(y-1)) for y in 1:L]
+
+  for it in 0:20
+      
+      open("data/shearwave_$ID"*"_$it.dat","w") do io
+          Printf.@printf(io, "%f", it*Δt)
+          for i in 1:L
+              Printf.@printf(io, " %f", Π[L÷2, i, L÷2, 1])
+          end 
+          Printf.@printf(io, "\n")
+          Printf.flush(io)
       end
 
-      (M,ϕk) = op(ϕ, L)
-		  Printf.@printf(io, "%i %f", i*skip, M)
-		  for kx in 1:L
-			  Printf.@printf(io, " %f %f", real(ϕk[kx]), imag(ϕk[kx]))
-		  end 
-		  Printf.@printf(io, "\n")
-      Printf.flush(io)
-      
-      (M,pik) = op(@view(Π[:,:,:,1]), L)
-		  Printf.@printf(iopi, "%i %f", i*skip, M)
-		  for kx in 1:L
-			  Printf.@printf(iopi, " %f %f", real(pik[kx]), imag(pik[kx]))
-		  end 
-		  Printf.@printf(iopi, "\n")
-      Printf.flush(iopi)
-
-		  thermalize(ϕ, Π, m², skip)
-      #display(i)
-	  end
-  end
+		  thermalize(ϕ, Π, 20)
   end
 
 
