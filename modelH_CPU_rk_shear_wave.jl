@@ -61,7 +61,7 @@ const m² =  -2.28587
 #const m² = -0.0e0
 const Δt = 0.04e0/Γ
 
-const Δtdet =  Δt/30
+const Δtdet =  Δt
 
 const Rate_phi = Float64(sqrt(2.0*Δt*Γ))
 const Rate_pi = Float64(sqrt(2.0*Δt*η))
@@ -405,9 +405,7 @@ function thermalize(u, m², N)
       #print("\n")
 
     end
-    project(Π)
-    print(energy(ϕ, Π))
-    print("\n")
+
 end
 
 """
@@ -427,7 +425,8 @@ end
 
 function energy(ϕ, π)
     K = kinetic_energy(ϕ,π)
-    K + sum(0.5 * (π[x,y,z,1]^2 + π[x,y,z,2]^2 + π[x,y,z,3]^2  +  1/2 * m² * ϕ[x,y,z]^2 + λ * ϕ[x,y,z]^4 / 4  ) for x in 1:L, y in 1:L, z in 1:L)/L^3
+    #K + sum(0.5 * (π[x,y,z,1]^2 + π[x,y,z,2]^2 + π[x,y,z,3]^2  +  1/2 * m² * ϕ[x,y,z]^2 + λ * ϕ[x,y,z]^4 / 4  ) for x in 1:L, y in 1:L, z in 1:L)/L^3
+    K + sum(0.5 * (π[x,y,z,1]^2 + π[x,y,z,2]^2 + π[x,y,z,3]^2  ) for x in 1:L, y in 1:L, z in 1:L)/L^3
 end
 
 
@@ -464,14 +463,15 @@ function run()
   Π .= 0.0
   ϕ .= 0.0
 
-  [Π[:, y, :, 1] .= 20*sin(2π/L*(y-1)) for y in 1:L]
+ # [Π[:, y, :, 1] .= 20*sin(2π/L*(y-1)) for y in 1:L]
   
-  #[ϕ[i,j,k] = exp(-((i-L÷2)^2+(j-L÷2)^2+(k-L÷2)^2  )) for i in 1:L, j in 1:L, k in 1:L ] 
+  [ϕ[i,j,k] = exp(-0.25*((i-L÷2)^2+(j-L÷2)^2+(k-L÷2)^2  )) for i in 1:L, j in 1:L, k in 1:L ] 
 
   maxt = 10^4
   skip = 50 
 
-  for it in 1:20
+
+  for it in 0:200
     open("data/shearwave_$ID"*"_$it.dat","w") do io
       Printf.@printf(io, "%f", it*Δt)
       for i in 1:L
@@ -480,6 +480,10 @@ function run()
       Printf.@printf(io, "\n")
       Printf.flush(io)
     end
+
+    project(Π)
+    Printf.@printf(stdout, "%i %.15f \n",it*skip, energy(ϕ, Π))
+
     thermalize(u, m², skip)
   end 
 
