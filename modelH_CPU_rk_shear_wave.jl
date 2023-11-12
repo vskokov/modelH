@@ -55,13 +55,13 @@ const Γ = 1.0e0
 const T = 1.0e0
 const ρ = 1.0e0
 
-const η = 0.01e0
+const η = 1.0e0
 
 const m² =  -2.28587
 #const m² = -0.0e0
 const Δt = 0.04e0/Γ
 
-const Δtdet =  Δt
+const Δtdet =  Δt/30
 
 const Rate_phi = Float64(sqrt(2.0*Δt*Γ))
 const Rate_pi = Float64(sqrt(2.0*Δt*η))
@@ -257,7 +257,7 @@ function Poissonc(ϕ)
     Threads.@threads for n3 in 1:L 
       for n2 in 1:L, n1 in 1:L
         k2 =  (sin(2*pi/L * (n1-1))^2 + sin(2*pi/L * (n2-1))^2 + sin(2*pi/L * (n3-1))^2)
-        if k2 > 1e-8
+        if k2 > 1e-11
            @inbounds Afft[n1,n2,n3] = -Afft[n1,n2,n3] /  k2 
         else 
            @inbounds Afft[n1,n2,n3] = 0.0 
@@ -301,7 +301,6 @@ function deterministic_elementary_step(du, u)
     
     dϕ = @view du[:,:,:,4]
 
-    project(u)
 
     # temporary arrays 
     dj = similar(ϕ)
@@ -316,7 +315,8 @@ function deterministic_elementary_step(du, u)
     end
 
     du[:,:,:,1:3] .= 0.0
-    dϕ .= -dj 
+    dϕ .= -dj
+    #dϕ .= 0.0
 
     for ν in 1:3
         ∇(ϕ, dϕ_ν, ν)
@@ -349,16 +349,20 @@ function deterministic(u)
     
     temp = similar(u)   
 
+    project(u)
     deterministic_elementary_step(k1, u)
     
     temp .= u.+Δtdet*k1
+    project(temp)
     deterministic_elementary_step(k2, temp)
     
 
     temp .= u .+ Δtdet*0.25*(k1 .+ k2)
+    project(temp)
     deterministic_elementary_step(k3, temp)
 
     u .+= Δtdet*(0.5*k1 .+ 0.5*k2 .+ 2.0*k3)/3.0  
+    project(u)
 end
 
 
@@ -390,7 +394,7 @@ function thermalize(u, m², N)
       if sum_check(ϕ) 
                break
       end
-      dissipative(ϕ, Π, m²)
+      #dissipative(ϕ, Π, m²)
       
       #project(Π)
       #E1 = energy(ϕ, Π)
@@ -415,9 +419,15 @@ function op(ϕ, L)
 	(real(average),ϕk[:,1,1])
 end
 
+
+function kinetic_energy(ϕ,π)
+    sum((3 * ϕ[x,y,z]^2 - ϕ[NNm(x),y,z] * ϕ[NNp(x),y,z] - ϕ[x,NNm(y),z] * ϕ[x,NNp(y),z] - ϕ[x,y,NNm(z)] * ϕ[x,y,NNp(z)])*0.25  for x in 1:L, y in 1:L, z in 1:L)/L^3
+end
+
+
 function energy(ϕ, π)
-    sum(3 * ϕ[x,y,z]^2 - ϕ[x,y,z] * (ϕ[NNp(x),y,z] + ϕ[x,NNp(y),z] + ϕ[x,y,NNp(z)]) + 1/2 * m² * ϕ[x,y,z]^2 + λ * ϕ[x,y,z]^4 / 4 + 1/2 * (π[x,y,z,1]^2 + π[x,y,z,2]^2 + π[x,y,z,3]^2) for x in 1:L, y in 1:L, z in 1:L)/L^3
-    #sum( 1/2 * (π[x,y,z,1]^2 + π[x,y,z,2]^2 + π[x,y,z,3]^2) for x in 1:L, y in 1:L, z in 1:L)
+    K = kinetic_energy(ϕ,π)
+    K + sum(0.5 * (π[x,y,z,1]^2 + π[x,y,z,2]^2 + π[x,y,z,3]^2  +  1/2 * m² * ϕ[x,y,z]^2 + λ * ϕ[x,y,z]^4 / 4  ) for x in 1:L, y in 1:L, z in 1:L)/L^3
 end
 
 
@@ -456,8 +466,10 @@ function run()
 
   [Π[:, y, :, 1] .= 20*sin(2π/L*(y-1)) for y in 1:L]
   
+  #[ϕ[i,j,k] = exp(-((i-L÷2)^2+(j-L÷2)^2+(k-L÷2)^2  )) for i in 1:L, j in 1:L, k in 1:L ] 
+
   maxt = 10^4
-  skip = 20 
+  skip = 50 
 
   for it in 1:20
     open("data/shearwave_$ID"*"_$it.dat","w") do io
